@@ -14,6 +14,8 @@ int main(int argc, char **argv){
     if(!processCommandLineArguments(argc, argv, pgTable, fp)){
         exit(EXIT_FAILURE);
     }
+    pgTable.
+    fclose(fp);
     return 0;
 }
 
@@ -60,6 +62,7 @@ bool processCommandLineArguments(int argc, char **argv, PageTable &pgTable, FILE
             return false;
         }
         pgTable.EntryCount.push_back(pow(2, level_bits));
+        level++;
         // cout << "Page Level " << level++ << " has "<<level_bits<<" bytes.\n";
         // total_level_bits += level_bits;
     }
@@ -67,6 +70,7 @@ bool processCommandLineArguments(int argc, char **argv, PageTable &pgTable, FILE
         cout << "Too many bits used in page tables\n";
         return false;
     }
-    pgTable
+    pgTable.offset = 32 - total_level_bits;
+    pgTable.LevelCount = level;
     return true;
 }
