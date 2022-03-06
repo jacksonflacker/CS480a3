@@ -1,18 +1,21 @@
 #include<iostream>
 #include <unistd.h>
+#include "PageTable.h"
 
 using namespace std;
 
-bool processCommandLineArguments(int, char**);
+bool processCommandLineArguments(int, char**, PageTable);
 
 int main(int argc, char **argv){
-    if(!processCommandLineArguments(argc, argv)){
+    PageTable pgTable;
+    if(!processCommandLineArguments(argc, argv, pgTable)){
         exit(EXIT_FAILURE);
     }
     return 0;
 }
 
-bool processCommandLineArguments(int argc, char **argv){
+bool processCommandLineArguments(int argc, char **argv, PageTable &pgTable){
+    uint32_t BitmaskAry [] = {0xFF000000, 0x00FF0000, 0x0000FF00};
     int total_level_bits = 0;
     if(argc <= 1){return false;}
     int option;
@@ -40,7 +43,7 @@ bool processCommandLineArguments(int argc, char **argv){
         cout << "Must provide Page Level Bits as argument\n";
         return false;
     }
-    cout << "File found:\t"<<argv[optind++]<<endl;
+    //cout << "File found:\t"<<argv[optind++]<<endl;
     int level = 0;
     for(int i = optind; i < argc; i++){
         int level_bits = atoi(argv[i]);

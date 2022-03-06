@@ -1,13 +1,15 @@
 #ifndef LEVEL_H
 #define LEVEL_H
 #include <vector>
+#include "Map.h"
 
+using namespace std;
 
-typedef struct{
+typedef struct Level{
 
     int depth;
-    vector<Level*> NextLevelPtr;
-
+    vector<struct Level*> NextLevelPtr;
+    vector<Map> MAP;
 }Level;
 
 #endif
