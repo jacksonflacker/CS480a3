@@ -2,17 +2,19 @@
 #define PAGE_TABLE_H
 #include <vector>
 #include "Level.h"
+
 using namespace std;
 
 typedef struct{
-    Level *RootNodePtr;
-    int LevelCount;
-    int offset;
-    vector<uint32_t> BitmaskAry;
-    vector<int> ShiftAry;
-    vector<uint32_t> EntryCount;
+        Level* RootLevelPtr;
+        int levelCount;
+        vector<uint32_t> BitmaskAry;
+        //uint32_t BitmaskAry[3];
+        vector<int> ShiftAry;
+        //int ShiftAry[3];
+        vector<uint32_t> EntryCount;
+        //uint32_t EntryCount[3];
+
 }PageTable;
-
-void initializePageTable(PageTable&);
-
 #endif
+void AllocateFirstLevel(PageTable*);
