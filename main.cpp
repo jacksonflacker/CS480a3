@@ -192,6 +192,6 @@ Map * pageLookup(PageTable *pageTable, unsigned int virtualAddress){
 unsigned int virtualAddressToPageNum(unsigned int virtualAddress, unsigned int mask, unsigned int shift){
     virtualAddress = virtualAddress & mask;
     virtualAddress = virtualAddress >> shift;
-    cout << virtualAddress <<endl;
+    printf("%x\n",virtualAddress);
     return virtualAddress;
 }
