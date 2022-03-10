@@ -14,7 +14,7 @@ using namespace std;
 class Level{
     public:
         int depth;
-        PageTable *PageTablePtr;
+        class PageTable *PageTablePtr;
         vector<Level*> NextLevelPtr;
         Level();
 };

@@ -20,7 +20,7 @@ using namespace std;
 // void AllocateFirstLevel(PageTable*);
 class PageTable{
         public:
-                Level* RootLevelPtr;
+                class Level* RootLevelPtr;
                 int levelCount;
                 vector<unsigned int> BitmaskAry;
                 vector<int> ShiftAry;
