@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <math.h>
+#include <numeric>
 #include <stdint.h>
 #include "PageTable.h"
 #include "tracereader.h"
@@ -20,33 +21,42 @@ bool ProcessCommandLineArguments(int, char**, PageTable*, CMD*);
 void ProcessBitmaskAry(int, PageTable*, int, int);
 
 int main(int argc, char **argv){
-    PageTable *pgTable = new PageTable;
+    PageTable *pgTable = new PageTable();
     FILE *ifp;	        /* trace file */
     p2AddrTr trace;	/* traced address */
     unsigned long i = 0;  /* instructions processed */
-    CMD *args = new CMD;    
+    CMD *args = new CMD;
     if(!ProcessCommandLineArguments(argc,argv,pgTable,args)){
         exit(1);
     }
-    report_bitmasks(pgTable->levelCount, &pgTable->BitmaskAry[0]);
+
+
     // allocates level 0. sets depth to 0 and sizes array to entry count
-    // AllocateFirstLevel(pgTable);
-    if ((ifp = fopen(args->filePath,"rb")) == NULL) {
-        cout << "Unable to open <<"<<argv[optind]<<">>\n";
-        exit(1);
-    }
-    //tes
-    //read trace file
-    while (!feof(ifp)) {
-        /* get next address and process */
-        if (NextAddress(ifp, &trace)) {
-        AddressDecoder(&trace, stdout);
-        i++;
-        break;
-        if ((i % 100000) == 0)
-        fprintf(stderr,"%dK samples processed\r", i/100000);
+    //pgTable->AllocateFirstLevel(pgTable);
+    //cout << pgTable == pgTable->RootLevelPtr->PageTablePtr;
+    if(args->output_mode == "bitmasks")
+        report_bitmasks(pgTable->levelCount, &(pgTable->BitmaskAry[0]));
+    else{
+        if ((ifp = fopen(args->filePath,"rb")) == NULL) {
+            cout << "Unable to open <<"<<args->filePath<<">>\n";
+            exit(1);
         }
-    }	
+        // //read trace file
+        while (!feof(ifp) && i != args->processes) {
+            /* get next address and process */
+            if (NextAddress(ifp, &trace)) {
+                i++;
+                if(args->output_mode == "offset"){
+                    int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(),0);
+                    trace.addr = trace.addr << shift;
+                    trace.addr = trace.addr >> shift;
+                    hexnum(trace.addr);
+                }
+                if ((i % 100000) == 0)
+                    fprintf(stderr,"%dK samples processed\r", i/100000);
+            }
+        }	
+    }
     /* clean up and return success */
     delete(args);
     delete(pgTable);
@@ -59,8 +69,9 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
     if(argc <= 1){return false;}
     // 32-bit
     int bits = 32;
-    // unsigned long num_processes = -1; /* number of memory access to process */
     args->processes = -1; // default val, if negative process all addresses
+    args->cache_cap = 0;
+    args->output_mode = "";
     int total_level_bits = 0;   /* total bits amongst all pages */
     int option; /* getopt() option */
     //int cache_capacity = 0;
@@ -96,12 +107,6 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
     }
     //store filepath
     args->filePath = argv[optind];
-    /* attempt to open trace file */
-    // if ((ifp = fopen(argv[optind],"rb")) == NULL) {
-    //     cout << "Unable to open <<"<<argv[optind]<<">>\n";
-    //     return false;
-    // }
-    cout << argv[optind]<<endl;
     // loop through size of pages
     for(int i = optind+1; i < argc; i++){
         int level_bits = atoi(argv[i]);
@@ -116,9 +121,10 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
         bits -= level_bits;
         // bits to shift for each level
         pgTable->ShiftAry.push_back(bits);
+        // store size of levels
+        pgTable->SizeOfLevels.push_back(level_bits);
         // store entry count for each level
         pgTable->EntryCount.push_back(pow(2,level_bits));
-        cout <<"Level "<<level<<" has "<<level_bits<<" bits\n";
         // increment level count
         level++;
         total_level_bits += level_bits;
