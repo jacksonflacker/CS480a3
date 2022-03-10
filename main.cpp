@@ -7,6 +7,7 @@
 #include "PageTable.h"
 #include "tracereader.h"
 #include "output_mode_helpers.h"
+#include "Map.h"
 
 using namespace std;
 
@@ -149,4 +150,17 @@ void ProcessBitmaskAry(int bitsToShift, PageTable* pgTable, int level_bits, int 
     // 0xFFFFFFFF ^ 0x00FFFFFF = 0xFF000000
     maskVal = maskVal ^ remove;
     pgTable->BitmaskAry.push_back(maskVal);
+}
+
+Map * pageLookup(PageTable *pageTable, unsigned int virtualAddress) {
+
+}
+
+void pageInsert(PageTable *pagetable, unsigned int virtualAddress, unsigned int frame) {
+    //TODO: virtualAddressToPageNumber
+    for(int i = 0; i<pagetable->levelCount; i++){
+        
+    }
+    //increment frame after page is inserted
+    frame++; 
 }
