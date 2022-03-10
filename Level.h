@@ -1,13 +1,21 @@
 #ifndef LEVEL_H
 #define LEVEL_H
 #include <vector>
+#include "PageTable.h"
 
 using namespace std;
 
-struct Level{
-    int depth;
-    vector<Level*> NextLevelPtr;
+// typedef struct Level{
+//     int depth;
+//     struct PageTable* PageTablePtr;
+//     vector<Level*> NextLevelPtr;
+// }Level;
 
+class Level{
+    public:
+        int depth;
+        PageTable *PageTablePtr;
+        vector<Level*> NextLevelPtr;
+        Level();
 };
-
 #endif
