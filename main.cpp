@@ -5,8 +5,10 @@
 #include <numeric>
 #include <stdint.h>
 #include "PageTable.h"
+#include "Level.h"
 #include "tracereader.h"
 #include "output_mode_helpers.h"
+#include "Map.h"
 
 using namespace std;
 
@@ -17,22 +19,26 @@ typedef struct{
     const char *filePath;
 }CMD;
 
+unsigned int virtualAddressToPageNum(unsigned int, unsigned int, unsigned int);  
+Map* pageLookUp(PageTable*, unsigned int);
 bool ProcessCommandLineArguments(int, char**, PageTable*, CMD*);
 void ProcessBitmaskAry(int, PageTable*, int, int);
+void pageInsert(PageTable*, unsigned int, unsigned int);
 
 int main(int argc, char **argv){
+    Map* mapPointer;
     PageTable *pgTable = new PageTable();
     FILE *ifp;	        /* trace file */
     p2AddrTr trace;	/* traced address */
+    // frame number
+    unsigned int frame = 0;
     unsigned long i = 0;  /* instructions processed */
     CMD *args = new CMD;
     if(!ProcessCommandLineArguments(argc,argv,pgTable,args)){
         exit(1);
     }
-
     // allocates level 0. sets depth to 0 and sizes array to entry count
-    //pgTable->AllocateFirstLevel(pgTable);
-    //cout << pgTable == pgTable->RootLevelPtr->PageTablePtr;
+    pgTable->AllocateFirstLevel(pgTable);
     if(args->output_mode == "bitmasks")
         report_bitmasks(pgTable->levelCount, &(pgTable->BitmaskAry[0]));
     else{
@@ -46,10 +52,16 @@ int main(int argc, char **argv){
             if (NextAddress(ifp, &trace)) {
                 i++;
                 if(args->output_mode == "offset"){
+                    // shift = total # of bits each level occupies
                     int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(),0);
+                    // shift to remove values except offset
                     trace.addr = trace.addr << shift;
+                    // shift offset to LSB
                     trace.addr = trace.addr >> shift;
                     hexnum(trace.addr);
+                }
+                else{
+                    mapPointer = pageLookUp(pgTable,trace.addr);
                 }
                 if ((i % 100000) == 0)
                     fprintf(stderr,"%dK samples processed\r", i/100000);
@@ -149,4 +161,37 @@ void ProcessBitmaskAry(int bitsToShift, PageTable* pgTable, int level_bits, int 
     // 0xFFFFFFFF ^ 0x00FFFFFF = 0xFF000000
     maskVal = maskVal ^ remove;
     pgTable->BitmaskAry.push_back(maskVal);
+}
+Map * pageLookup(PageTable *pageTable, unsigned int virtualAddress){
+    Level *currLevel = pageTable->RootLevelPtr;
+    bool VPN_notFound = true;
+    do{
+        unsigned VPN = virtualAddressToPageNum(virtualAddress,
+        pageTable->BitmaskAry[currLevel->depth],
+        pageTable->ShiftAry[currLevel->depth]
+        );
+        // leaf node
+        if(currLevel->depth+1 == pageTable->levelCount){
+            if(currLevel->MapPtr[VPN] != NULL)
+                return currLevel->MapPtr[VPN];
+            else
+                VPN_notFound = false;
+        }
+        else{
+            if(currLevel->NextLevelPtr[VPN] != NULL){
+                currLevel = currLevel->NextLevelPtr[VPN];
+            }
+            else{
+                VPN_notFound = false;
+            }
+        }
+    }while(VPN_notFound);
+    
+    return NULL;
+}
+unsigned int virtualAddressToPageNum(unsigned int virtualAddress, unsigned int mask, unsigned int shift){
+    virtualAddress = virtualAddress & mask;
+    virtualAddress = virtualAddress >> shift;
+    cout << virtualAddress <<endl;
+    return virtualAddress;
 }
