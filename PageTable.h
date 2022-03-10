@@ -27,6 +27,6 @@ class PageTable{
                 vector<uint32_t> EntryCount;
                 vector<int> SizeOfLevels;
                 PageTable();
-                //void AllocateFirstLevel(PageTable*);
+                void AllocateFirstLevel(PageTable*);
 };
 #endif
