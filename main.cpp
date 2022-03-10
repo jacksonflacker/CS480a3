@@ -30,7 +30,6 @@ int main(int argc, char **argv){
         exit(1);
     }
 
-
     // allocates level 0. sets depth to 0 and sizes array to entry count
     //pgTable->AllocateFirstLevel(pgTable);
     //cout << pgTable == pgTable->RootLevelPtr->PageTablePtr;
