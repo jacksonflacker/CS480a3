@@ -17,7 +17,7 @@ class Level{
         int depth;
         class PageTable *PageTablePtr;
         vector<Level*> NextLevelPtr;
-        vector<Map*> MapPtr;
+        vector<class Map*> MapPtr;
         Level();
 };
 #endif
