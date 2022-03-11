@@ -16,6 +16,5 @@ class Map{
         uint32_t VPN;
         uint32_t PFN;
         bool valid;
-        uint32_t frame;
 };
 #endif

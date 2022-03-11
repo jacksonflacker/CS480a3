@@ -22,6 +22,8 @@ class PageTable{
         public:
                 class Level* RootLevelPtr;
                 int levelCount;
+                int offset;
+                vector<uint32_t> currVPN;
                 vector<unsigned int> BitmaskAry;
                 vector<int> ShiftAry;
                 vector<uint32_t> EntryCount;
