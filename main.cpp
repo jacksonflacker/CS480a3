@@ -65,8 +65,25 @@ int main(int argc, char **argv){
                     // call page insert if map pointer is null
                     if(!mapPointer){
                         pageInsert(pgTable,trace.addr, frame);
+                        if(args->output_mode == "vpn2pfn"){
+                            // frame -1 because frame incremented after insert
+                            report_pagemap(pgTable->levelCount,&pgTable->currVPN[0], frame-1);
+                        }
                     }
-
+                    // map pointer not null
+                    else{
+                        if(args->output_mode == "vpn2pfn"){
+                            // create a vector of level VPNs to pass to function
+                            vector<uint32_t> pages;
+                            for(int j = 0; j < pgTable->levelCount; j++){
+                                uint32_t temp = trace.addr;
+                                temp = temp & pgTable->BitmaskAry[j];
+                                temp = temp >> pgTable->ShiftAry[j];
+                                pages.push_back(temp);
+                            }
+                            report_pagemap(pgTable->levelCount,&pages[0], mapPointer->PFN);
+                        }
+                    }
                 }
                 if ((i % 100000) == 0)
                     fprintf(stderr,"%dK samples processed\r", i/100000);
@@ -145,6 +162,8 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
         level++;
         total_level_bits += level_bits;
     }
+    // store offset of virtual address
+    pgTable->offset = bits; // remaining bits after level bits occupied
     // store total number of levels into struct
     pgTable->levelCount = level;
     // check if total number of bits is less than 28
@@ -170,19 +189,27 @@ void ProcessBitmaskAry(int bitsToShift, PageTable* pgTable, int level_bits, int 
 void pageInsert(PageTable* pageTable, unsigned int virtualAddress, unsigned int &frame){
     Level *currLevel = pageTable->RootLevelPtr;
     bool VPN_notFound = true;
+    unsigned int fullVPN = 0;
     do{
         // masking and shifting to extract VPN from logical address
-        printf("virtual address: %x\n",virtualAddress);
-        unsigned VPN = virtualAddress & pageTable->BitmaskAry[currLevel->depth];
+        //printf("virtual address: %x\n",virtualAddress);
+        unsigned int VPN = virtualAddress & pageTable->BitmaskAry[currLevel->depth];
         VPN = VPN >> pageTable->ShiftAry[currLevel->depth];
-        printf("vitrual page number: %x\n",VPN);
+        fullVPN += VPN;
+        pageTable->currVPN[currLevel->depth] = VPN;
+        //printf("vitrual page number: %x\n",VPN);
         // check if leaf node
         if(currLevel->depth+1 == pageTable->levelCount){
             //check if map object is null
             if(currLevel->MapPtr[VPN] == NULL){
                 //insert map pointer
-
-                //increment frame
+                currLevel->MapPtr[VPN] = new Map();
+                // store full virtual page number into map
+                currLevel->MapPtr[VPN]->VPN = fullVPN;
+                // insert frame and increment frame number after insert
+                currLevel->MapPtr[VPN]->PFN = frame++;
+                currLevel->MapPtr[VPN]->valid = true;
+                //cout << "mapped new frame\n";
             }
             //set flag to false
             VPN_notFound = false;
