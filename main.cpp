@@ -85,6 +85,11 @@ int main(int argc, char **argv){
                         }
                     }
                 }
+                if(args->output_mode =="virtual2physical"){ 
+                    int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
+                    uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame + dest; 
+                    report_virtual2physical(trace.addr,dest);
+                    }
                 if ((i % 100000) == 0)
                     fprintf(stderr,"%dK samples processed\r", i/100000);
             }
