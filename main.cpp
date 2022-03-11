@@ -69,6 +69,11 @@ int main(int argc, char **argv){
                             // frame -1 because frame incremented after insert
                             report_pagemap(pgTable->levelCount,&pgTable->currVPN[0], frame-1);
                         }
+                        else(args->output_mode =="virtual2physical"){ 
+                            int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
+                            uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame-1 + dest; 
+                            report_virtual2physical(trace.addr,dest);
+                        }
                     }
                     // map pointer not null
                     else{
@@ -84,12 +89,15 @@ int main(int argc, char **argv){
                             report_pagemap(pgTable->levelCount,&pages[0], mapPointer->PFN);
                         }
                     }
-                }
-                if(args->output_mode =="virtual2physical"){ 
-                    int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
-                    uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame + dest; 
-                    report_virtual2physical(trace.addr,dest);
+                    else{
+                        if(args->output_mode =="virtual2physical"){ 
+                            int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
+                            uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame + dest; 
+                            report_virtual2physical(trace.addr,dest);
+                        }
                     }
+                }
+                
                 if ((i % 100000) == 0)
                     fprintf(stderr,"%dK samples processed\r", i/100000);
             }
