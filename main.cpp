@@ -22,6 +22,7 @@ typedef struct{
 bool ProcessCommandLineArguments(int, char**, PageTable*, CMD*);
 void ProcessBitmaskAry(int, PageTable*, int, int);
 void pageInsert(PageTable* , unsigned int , unsigned int&);
+unsigned int returnOffset(PageTable*, unsigned int);
 
 int main(int argc, char **argv){
     Map* mapPointer;
@@ -69,12 +70,10 @@ int main(int argc, char **argv){
                             // frame -1 because frame incremented after insert
                             report_pagemap(pgTable->levelCount,&pgTable->currVPN[0], frame-1);
                         }
-                        else{ 
-                            if (args->output_mode =="virtual2physical"){ 
-                                int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
-                                uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame-1 + dest; 
-                                report_virtual2physical(trace.addr,dest);
-                        }
+                        else if(args->output_mode == "virtual2physical"){
+                            unsigned int dest = returnOffset(pgTable, trace.addr);
+                            dest = ((frame-1) << pgTable->offset) + dest;
+                            report_virtual2physical(trace.addr,dest);
                         }
                     }
                     // map pointer not null
@@ -90,16 +89,14 @@ int main(int argc, char **argv){
                             }
                             report_pagemap(pgTable->levelCount,&pages[0], mapPointer->PFN);
                         }
-                    }
-                    else{
-                        if(args->output_mode =="virtual2physical"){ 
-                            int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(), 0)
-                            uint32_t dest = trace.addr << shift; dest = dest >> shift; dest = frame + dest; 
+                        else if(args->output_mode == "virtual2physical"){
+                            unsigned int dest = returnOffset(pgTable, trace.addr);
+                            //cout <<"mapPointer frame: "<<mapPointer->PFN<<endl;
+                            dest = (mapPointer->PFN << pgTable->offset) + dest;
                             report_virtual2physical(trace.addr,dest);
                         }
                     }
                 }
-                
                 if ((i % 100000) == 0)
                     fprintf(stderr,"%dK samples processed\r", i/100000);
             }
@@ -255,4 +252,9 @@ void pageInsert(PageTable* pageTable, unsigned int virtualAddress, unsigned int 
         }
 
     }while(VPN_notFound);
+}
+unsigned int returnOffset(PageTable* pageTable, unsigned int virtualAddress){
+    int shift = accumulate(pageTable->SizeOfLevels.begin(),pageTable->SizeOfLevels.end(),0);
+    virtualAddress = virtualAddress << shift;
+    return (virtualAddress >> shift);
 }
