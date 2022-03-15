@@ -4,6 +4,8 @@
 #include <math.h>
 #include <numeric>
 #include <stdint.h>
+#include <map>
+#include "TLB.h"
 #include "PageTable.h"
 #include "Level.h"
 #include "tracereader.h"
@@ -23,90 +25,180 @@ bool ProcessCommandLineArguments(int, char**, PageTable*, CMD*);
 void ProcessBitmaskAry(int, PageTable*, int, int);
 void pageInsert(PageTable* , unsigned int , unsigned int&);
 unsigned int returnOffset(PageTable*, unsigned int);
+unsigned int returnVirtualPageNumber(PageTable*, unsigned int);
 
 int main(int argc, char **argv){
-    Map* mapPointer;
+    // pointer to page table object
     PageTable *pgTable = new PageTable();
+    // pointer to map object
+    Map* mapPointer;
+    // pointer to TLB object
+    TLB *tlbCache;
+
     FILE *ifp;	        /* trace file */
     p2AddrTr trace;	/* traced address */
     // frame number
     unsigned int frame = 0;
+    // virtual page number
+    unsigned int virtualPageNumber;
+    // flag for cache hits
+    bool tlbHit = false;
+    // flag for page hits
+    bool pageHit = false;
     unsigned long i = 0;  /* instructions processed */
+    // pointer to CMD object
     CMD *args = new CMD;
+
+    // process command line arguments and store information
     if(!ProcessCommandLineArguments(argc,argv,pgTable,args)){
+        delete(pgTable);
+        delete(args);
         exit(1);
     }
     // allocates level 0. sets depth to 0 and sizes array to entry count
     pgTable->AllocateFirstLevel(pgTable);
-    if(args->output_mode == "bitmasks")
+
+    // exit after printing bit masks, do need to open file
+    if(args->output_mode == "bitmasks"){
         report_bitmasks(pgTable->levelCount, &(pgTable->BitmaskAry[0]));
-    else{
-        if ((ifp = fopen(args->filePath,"rb")) == NULL) {
-            cout << "Unable to open <<"<<args->filePath<<">>\n";
-            exit(1);
-        }
-        // //read trace file
-        while (!feof(ifp) && i != args->processes) {
-            /* get next address and process */
-            if (NextAddress(ifp, &trace)) {
-                i++;
-                // print the offset of virtual address for N number of processes
-                if(args->output_mode == "offset"){
-                    // shift = total # of bits each level occupies
-                    int shift = accumulate(pgTable->SizeOfLevels.begin(),pgTable->SizeOfLevels.end(),0);
-                    // shift to remove values except offset
-                    trace.addr = trace.addr << shift;
-                    // shift offset to LSB
-                    trace.addr = trace.addr >> shift;
-                    hexnum(trace.addr);
+        delete(pgTable);
+        delete(args);
+        exit(1);
+    }
+    // exit if file could not be opened
+    if ((ifp = fopen(args->filePath,"rb")) == NULL) {
+        cout << "Unable to open <<"<<args->filePath<<">>\n";
+        delete(pgTable);
+        delete(args);
+        exit(1);
+    }
+    // pointer to TLB object
+    tlbCache = new TLB();
+    //store cache capacity, zero if none specified
+    tlbCache->maxCapacity = args->cache_cap;
+    // read trace file
+    while (!feof(ifp) && i != args->processes) {
+        /* get next address and process */
+        if (NextAddress(ifp, &trace)) {
+            i++;
+            // print the offset of virtual address for N number of processes
+            if(args->output_mode == "offset"){
+                // return offset of virtual addres
+                hexnum(returnOffset(pgTable, trace.addr));
+            }
+            else{
+                // if cache is used
+                if(args->cache_cap > 0){
+                    // check if VPN mapped to frame in TLB
+                    virtualPageNumber = returnVirtualPageNumber(pgTable, trace.addr);
+                    // VPN is in hashtable if count is greater than 0
+                    if(tlbCache->VPN2PFN.count(virtualPageNumber)){
+                        // increment hit count
+                        tlbCache->cacheHits++;
+                        // set flag to true
+                        tlbHit = true;
+                        // insert into LRU queue
+                        tlbCache->LastRecentlyUsed(virtualPageNumber);
+                    }
                 }
-                else{
+                // cache miss or cache not used, walk table
+                if(!tlbHit){
+                    // increment cache miss count
+                    tlbCache->cacheMisses++;
+                    tlbHit = false;
                     // returns pointer to map object or null
                     mapPointer = mapPointer->pageLookUp(pgTable,trace.addr);
                     // call page insert if map pointer is null
                     if(!mapPointer){
+                        // page walk miss
+                        pageHit = false;                       
+                        // walk the table
                         pageInsert(pgTable,trace.addr, frame);
-                        if(args->output_mode == "vpn2pfn"){
-                            // frame -1 because frame incremented after insert
-                            report_pagemap(pgTable->levelCount,&pgTable->currVPN[0], frame-1);
-                        }
-                        else if(args->output_mode == "virtual2physical"){
-                            unsigned int dest = returnOffset(pgTable, trace.addr);
-                            dest = ((frame-1) << pgTable->offset) + dest;
-                            report_virtual2physical(trace.addr,dest);
-                        }
+                        // insert virtual page number into hash table and
+                        tlbCache->insertIntoTLB(virtualPageNumber, frame-1); 
                     }
                     // map pointer not null
                     else{
-                        if(args->output_mode == "vpn2pfn"){
-                            // create a vector of level VPNs to pass to function
-                            vector<uint32_t> pages;
-                            for(int j = 0; j < pgTable->levelCount; j++){
-                                uint32_t temp = trace.addr;
-                                temp = temp & pgTable->BitmaskAry[j];
-                                temp = temp >> pgTable->ShiftAry[j];
-                                pages.push_back(temp);
-                            }
-                            report_pagemap(pgTable->levelCount,&pages[0], mapPointer->PFN);
-                        }
-                        else if(args->output_mode == "virtual2physical"){
-                            unsigned int dest = returnOffset(pgTable, trace.addr);
-                            //cout <<"mapPointer frame: "<<mapPointer->PFN<<endl;
-                            dest = (mapPointer->PFN << pgTable->offset) + dest;
-                            report_virtual2physical(trace.addr,dest);
-                        }
+                        // page table hit
+                        pageHit = true;
+                        tlbCache->insertIntoTLB(virtualPageNumber, mapPointer->PFN);
                     }
                 }
-                if ((i % 100000) == 0)
-                    fprintf(stderr,"%dK samples processed\r", i/100000);
+                int currFrame;
+                // tlb hit
+                if(tlbHit){
+                    // currFrame = frame # in TLB cache
+                    currFrame = tlbCache->VPN2PFN[virtualPageNumber];
+                }
+                // tlb miss, page hit
+                else if(pageHit){
+                    // currFrame = frame # of page hit
+                    currFrame = mapPointer->PFN;
+                }
+                // page miss and tlb miss
+                else{
+                    // currFrame = frame # recently inserted
+                    currFrame = frame-1;
+                }
+                // get offset of virtual address
+                unsigned int dest = returnOffset(pgTable, trace.addr);
+                // shift frame # by offset before concatenating w/ offset
+                dest = (currFrame << pgTable->offset) + dest;
+                // dest = physical address
+
+                if(args->output_mode == "virtual2physical"){
+                    report_virtual2physical(trace.addr,dest);
+                }
+                else if(args->output_mode == "vpn2pfn"){
+                    if(!pageHit){
+                        report_pagemap(pgTable->levelCount,&pgTable->currVPN[0], currFrame);
+                    }
+                    // tlb hit, or page miss
+                    else{
+                        // vector of multi level VPNs
+                        vector<uint32_t> pages;
+                        for(int j = 0; j < pgTable->levelCount; j++){
+                            uint32_t temp = trace.addr;
+                            temp = temp & pgTable->BitmaskAry[j];
+                            temp = temp >> pgTable->ShiftAry[j];
+                            pages.push_back(temp);
+                        }
+                        report_pagemap(pgTable->levelCount,&pages[0], currFrame);                     
+                    }
+                }
+                else if(args->output_mode == "v2p_tlb_pt"){
+                    report_v2pUsingTLB_PTwalk(trace.addr, dest, tlbHit, pageHit);
+                    for(map<uint32_t,uint32_t>::iterator it = tlbCache->VPN2PFN.begin(); it != tlbCache->VPN2PFN.end(); it++){
+                        printf("%x,\t", it->first);
+                    }
+                    cout << endl;
+                }
             }
-        }	
+            // reset flags
+            pageHit = false;
+            tlbHit = false;
+        }
+    }
+    // print summary
+    if(args->output_mode == "" || args->output_mode == "summary"){
+        report_summary(pow(2,pgTable->offset),
+        tlbCache->cacheHits,
+        pgTable->pageHits,
+        i,
+        pgTable->pageMisses,
+        100);
     }
     /* clean up and return success */
+    delete(tlbCache);
     delete(args);
     delete(pgTable);
     fclose(ifp);
     return 0;
+}
+
+unsigned int returnVirtualPageNumber(PageTable* pgTable, unsigned int virtualAddress){
+    unsigned int VPN = (virtualAddress >> pgTable->offset);
+    return (VPN << pgTable->offset);
 }
 
 bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD *args){
@@ -145,15 +237,18 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
                 break;
         }
     }
+    cout << args->processes<<endl;
     // no page level bits included
     if(optind + 1 == argc){
         cout << "Must provide Page Level Bits as argument\n";
         return false;
     }
     //store filepath
+    cout<<argv[optind]<<endl;
     args->filePath = argv[optind];
     // loop through size of pages
     for(int i = optind+1; i < argc; i++){
+        cout<<argv[i]<<endl;
         int level_bits = atoi(argv[i]);
         // return false if no level bits provided
         if(level_bits < 1){
