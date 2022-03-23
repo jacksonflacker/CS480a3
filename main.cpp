@@ -1,3 +1,15 @@
+/**
+ * @file main.cpp
+ * 
+ * @author Omar Martinez
+ * @author Jackson Flacker
+ * 
+ * @brief Simulation of demand paging using a multi-level page tree/table with 
+ *        address translation caching.
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 #include <iostream>
 #include <stdio.h>
 #include <unistd.h>
@@ -13,7 +25,10 @@
 #include "Map.h"
 
 using namespace std;
-
+/**
+ * @brief Structure which holds command line arguments.
+ * 
+ */
 typedef struct{
     long processes;
     int cache_cap;
@@ -23,7 +38,7 @@ typedef struct{
 
 bool ProcessCommandLineArguments(int, char**, PageTable*, CMD*);
 void ProcessBitmaskAry(int, PageTable*, int, int);
-void pageInsert(PageTable* , unsigned int , unsigned int&);
+//void pageInsert(PageTable* , unsigned int , unsigned int&);
 unsigned int returnOffset(PageTable*, unsigned int);
 unsigned int returnVirtualPageNumber(PageTable*, unsigned int);
 
@@ -48,13 +63,13 @@ int main(int argc, char **argv){
     unsigned long i = 0;  /* instructions processed */
     // pointer to CMD object
     CMD *args = new CMD;
-
     // process command line arguments and store information
     if(!ProcessCommandLineArguments(argc,argv,pgTable,args)){
         delete(pgTable);
         delete(args);
         exit(1);
     }
+
     // allocates level 0. sets depth to 0 and sizes array to entry count
     pgTable->AllocateFirstLevel(pgTable);
 
@@ -63,7 +78,7 @@ int main(int argc, char **argv){
         report_bitmasks(pgTable->levelCount, &(pgTable->BitmaskAry[0]));
         delete(pgTable);
         delete(args);
-        exit(1);
+        return 0;
     }
     // exit if file could not be opened
     if ((ifp = fopen(args->filePath,"rb")) == NULL) {
@@ -87,18 +102,19 @@ int main(int argc, char **argv){
                 hexnum(returnOffset(pgTable, trace.addr));
             }
             else{
+                virtualPageNumber = returnVirtualPageNumber(pgTable, trace.addr);
+                // insert into recently used list
+                tlbCache->RecentlyUsed(virtualPageNumber);
+                //tlbCache->LRU_handler(virtualPageNumber);
                 // if cache is used
                 if(args->cache_cap > 0){
                     // check if VPN mapped to frame in TLB
-                    virtualPageNumber = returnVirtualPageNumber(pgTable, trace.addr);
                     // VPN is in hashtable if count is greater than 0
                     if(tlbCache->VPN2PFN.count(virtualPageNumber)){
                         // increment hit count
                         tlbCache->cacheHits++;
                         // set flag to true
                         tlbHit = true;
-                        // insert into LRU queue
-                        tlbCache->LastRecentlyUsed(virtualPageNumber);
                     }
                 }
                 // cache miss or cache not used, walk table
@@ -113,15 +129,18 @@ int main(int argc, char **argv){
                         // page walk miss
                         pageHit = false;                       
                         // walk the table
-                        pageInsert(pgTable,trace.addr, frame);
+                        pgTable->pageInsert(trace.addr, frame);
                         // insert virtual page number into hash table and
                         tlbCache->insertIntoTLB(virtualPageNumber, frame-1); 
+                        //tlbCache->TLB_insertion(virtualPageNumber, frame-1);
                     }
                     // map pointer not null
                     else{
                         // page table hit
                         pageHit = true;
+                        // insert into cache
                         tlbCache->insertIntoTLB(virtualPageNumber, mapPointer->PFN);
+                        //tlbCache->TLB_insertion(virtualPageNumber, mapPointer->PFN);
                     }
                 }
                 int currFrame;
@@ -168,15 +187,19 @@ int main(int argc, char **argv){
                 }
                 else if(args->output_mode == "v2p_tlb_pt"){
                     report_v2pUsingTLB_PTwalk(trace.addr, dest, tlbHit, pageHit);
-                    for(map<uint32_t,uint32_t>::iterator it = tlbCache->VPN2PFN.begin(); it != tlbCache->VPN2PFN.end(); it++){
-                        printf("%x,\t", it->first);
-                    }
-                    cout << endl;
+                    // map<uint32_t, int>::iterator it;
+                    // for(it = tlbCache->VPN_virtualTime.begin(); it!=tlbCache->VPN_virtualTime.end(); it++){
+                    //     printf("%X, ", it->first);
+                    // }
+                    // cout << endl;
                 }
             }
             // reset flags
             pageHit = false;
             tlbHit = false;
+            
+            // increment virtual time
+            // tlbCache->virtualTime++;
         }
     }
     // print summary
@@ -186,7 +209,7 @@ int main(int argc, char **argv){
         pgTable->pageHits,
         i,
         pgTable->pageMisses,
-        100);
+        pgTable->bytesUsed);
     }
     /* clean up and return success */
     delete(tlbCache);
@@ -195,12 +218,28 @@ int main(int argc, char **argv){
     fclose(ifp);
     return 0;
 }
-
+/**
+ * @brief Returns the virtual page number of a virtual address.
+ * 
+ * @param pgTable: PageTable pointer
+ * @param virtualAddress: unsigned virtual address 
+ * @return unsigned int 
+ */
 unsigned int returnVirtualPageNumber(PageTable* pgTable, unsigned int virtualAddress){
     unsigned int VPN = (virtualAddress >> pgTable->offset);
     return (VPN << pgTable->offset);
 }
-
+/**
+ * @brief Process optional and mandatory command line arguemnts and stores them
+ *        into their respective data structures for later use.
+ * 
+ * @param argc: # of arguments
+ * @param argv: pointer to char pointers
+ * @param pgTable: PageTable pointer
+ * @param args: data structure for 
+ * @return true: if command line arguments processed correctly
+ * @return false: otherwise
+ */
 bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD *args){
     // terminate program if no mandatory arguments present
     if(argc <= 1){return false;}
@@ -232,23 +271,23 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
                 break;
             case 'o':
                 args->output_mode = optarg;
+                break;
                 //cout << "Output mode:\t"<<optarg<<endl;
             default:
                 break;
         }
     }
-    cout << args->processes<<endl;
+    //cout << args->output_mode<<endl;
     // no page level bits included
     if(optind + 1 == argc){
         cout << "Must provide Page Level Bits as argument\n";
         return false;
     }
     //store filepath
-    cout<<argv[optind]<<endl;
     args->filePath = argv[optind];
     // loop through size of pages
     for(int i = optind+1; i < argc; i++){
-        cout<<argv[i]<<endl;
+        //cout<<argv[i]<<endl;
         int level_bits = atoi(argv[i]);
         // return false if no level bits provided
         if(level_bits < 1){
@@ -280,12 +319,21 @@ bool ProcessCommandLineArguments(int argc, char **argv, PageTable* pgTable, CMD 
     }
     return true;
 }
-// calculates bit masking for each page based on page size
+/**
+ * @brief Generate bit masking for each page level. Shift left by 1 bit then
+ *        OR by 1. XOR to remove unwanted bits. Store mask values inside data
+ *        structure for later use.
+ * 
+ * @param bitsToShift: # of bits to shift for generating bit mask
+ * @param pgTable: PageTable pointer
+ * @param level_bits: number of bits current level occupies
+ * @param curLevel: depth of current level
+ */
 void ProcessBitmaskAry(int bitsToShift, PageTable* pgTable, int level_bits, int curLevel){
     uint32_t maskVal = 0;
     for(int i = 0; i < bitsToShift; i++){
-        maskVal = maskVal << 1;
-        maskVal = maskVal | 1;
+        maskVal = maskVal << 1; // shift left by 1 bit
+        maskVal = maskVal | 1; // OR by 1
     }
     // unwanted bits in the bitmask
     int remove = pow(2,(bitsToShift - level_bits))-1;
@@ -293,61 +341,80 @@ void ProcessBitmaskAry(int bitsToShift, PageTable* pgTable, int level_bits, int 
     maskVal = maskVal ^ remove;
     pgTable->BitmaskAry.push_back(maskVal);
 }
-void pageInsert(PageTable* pageTable, unsigned int virtualAddress, unsigned int &frame){
-    Level *currLevel = pageTable->RootLevelPtr;
-    bool VPN_notFound = true;
-    unsigned int fullVPN = 0;
-    do{
-        // masking and shifting to extract VPN from logical address
-        //printf("virtual address: %x\n",virtualAddress);
-        unsigned int VPN = virtualAddress & pageTable->BitmaskAry[currLevel->depth];
-        VPN = VPN >> pageTable->ShiftAry[currLevel->depth];
-        fullVPN += VPN;
-        pageTable->currVPN[currLevel->depth] = VPN;
-        //printf("vitrual page number: %x\n",VPN);
-        // check if leaf node
-        if(currLevel->depth+1 == pageTable->levelCount){
-            //check if map object is null
-            if(currLevel->MapPtr[VPN] == NULL){
-                //insert map pointer
-                currLevel->MapPtr[VPN] = new Map();
-                // store full virtual page number into map
-                currLevel->MapPtr[VPN]->VPN = fullVPN;
-                // insert frame and increment frame number after insert
-                currLevel->MapPtr[VPN]->PFN = frame++;
-                currLevel->MapPtr[VPN]->valid = true;
-                //cout << "mapped new frame\n";
-            }
-            //set flag to false
-            VPN_notFound = false;
-        }
-        // current level is not leaf node
-        else{
-            //check if level pointer at current vpn is null
-            if(currLevel->NextLevelPtr[VPN] == NULL){
-                // insert a new level pointer
-                currLevel->NextLevelPtr[VPN] = new Level();
-                // initialize new level depth
-                currLevel->NextLevelPtr[VPN]->depth = currLevel->depth+1;
-                // new level points back to pagetable
-                currLevel->NextLevelPtr[VPN]->PageTablePtr = pageTable;
-                int currDepth = currLevel->NextLevelPtr[VPN]->depth;
-                //check if new level is a leaf node
-                if(currDepth+1 == pageTable->levelCount){
-                    // resize map array
-                    currLevel->NextLevelPtr[VPN]->MapPtr.resize(pageTable->EntryCount[currDepth]);                    
-                }
-                else{
-                    // resize next level array
-                    currLevel->NextLevelPtr[VPN]->NextLevelPtr.resize(pageTable->EntryCount[currDepth]);
-                }
-            }
-            // iterate through next level
-            currLevel = currLevel->NextLevelPtr[VPN];
-        }
-
-    }while(VPN_notFound);
-}
+/**
+ * @brief Used to add new entries to the page table when we have discovered that
+ *        a page has not yet been allocated. Creates new levels and/or iterates through
+ *        levels until leaf node located. At leaf node, maps VPN to frame.
+ * 
+ * @param pageTable: PageTable pointer
+ * @param virtualAddress: current virtual address processed
+ * @param frame: current frame number
+ */
+// void pageInsert(PageTable* pageTable, unsigned int virtualAddress, unsigned int &frame){
+//     // pointer to current level
+//     Level *currLevel = pageTable->RootLevelPtr;
+//     // flag to end while loop
+//     bool VPN_notFound = true;
+//     // VPN used for mapping
+//     unsigned int fullVPN = 0;
+//     do{
+//         // masking and shifting to extract VPN from logical address
+//         unsigned int VPN = virtualAddress & pageTable->BitmaskAry[currLevel->depth];
+//         VPN = VPN >> pageTable->ShiftAry[currLevel->depth];
+//         // concatenate multi level vpns to generate full VPN
+//         fullVPN += VPN;
+//         // store multi level vpn into array of current VPNs processed
+//         pageTable->currVPN[currLevel->depth] = VPN;
+//         // check if leaf node
+//         if(currLevel->depth+1 == pageTable->levelCount){
+//             //check if map object is null
+//             if(currLevel->MapPtr[VPN] == NULL){
+//                 //insert map pointer
+//                 currLevel->MapPtr[VPN] = new Map();
+//                 // store full virtual page number into map
+//                 currLevel->MapPtr[VPN]->VPN = fullVPN;
+//                 // insert frame and increment frame number after insert
+//                 currLevel->MapPtr[VPN]->PFN = frame++;
+//                 currLevel->MapPtr[VPN]->valid = true;
+//             }
+//             //set flag to false
+//             VPN_notFound = false;
+//         }
+//         // current level is not leaf node
+//         else{
+//             //check if level pointer at current vpn is null
+//             if(currLevel->NextLevelPtr[VPN] == NULL){
+//                 // insert a new level pointer
+//                 currLevel->NextLevelPtr[VPN] = new Level();
+//                 // increment bytes used
+//                 pageTable->bytesUsed += (pageTable->EntryCount[currLevel->depth+1]*8);
+//                 // initialize new level depth
+//                 currLevel->NextLevelPtr[VPN]->depth = currLevel->depth+1;
+//                 // new level points back to pagetable
+//                 currLevel->NextLevelPtr[VPN]->PageTablePtr = pageTable;
+//                 int currDepth = currLevel->NextLevelPtr[VPN]->depth;
+//                 //check if new level is a leaf node
+//                 if(currDepth+1 == pageTable->levelCount){
+//                     // resize map array
+//                     currLevel->NextLevelPtr[VPN]->MapPtr.resize(pageTable->EntryCount[currDepth]);                    
+//                 }
+//                 else{
+//                     // resize next level array
+//                     currLevel->NextLevelPtr[VPN]->NextLevelPtr.resize(pageTable->EntryCount[currDepth]);
+//                 }
+//             }
+//             // iterate through next level
+//             currLevel = currLevel->NextLevelPtr[VPN];
+//         }
+//     }while(VPN_notFound);
+// }
+/**
+ * @brief Given page level bits occupied, return offset of 32 bit virtual address.
+ * 
+ * @param pageTable: PageTable pointer
+ * @param virtualAddress: current virtual address
+ * @return offset: Offset of 32 bit virtual address
+ */
 unsigned int returnOffset(PageTable* pageTable, unsigned int virtualAddress){
     int shift = accumulate(pageTable->SizeOfLevels.begin(),pageTable->SizeOfLevels.end(),0);
     virtualAddress = virtualAddress << shift;

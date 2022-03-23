@@ -1,20 +1,25 @@
+/**
+ * @file Map.h
+ * 
+ * @author Omar Martinez
+ * @author Jackson Flacker
+ * 
+ * @brief A structure containing information about the mapping of a page to a 
+ *        frame, used in leaf nodes of the tree.  
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 #ifndef MAP_H
 #define MAP_H
 #include "PageTable.h"
 
-// typedef struct Map{
-//     uint32_t VPN;
-//     uint32_t FPN;
-//     bool flag;
-//     uint32_t frame;
-// }Map;
-
 class Map{
     public:
         Map();
-        Map* pageLookUp(class PageTable*, unsigned int);
-        uint32_t VPN;
-        uint32_t PFN;
+        Map* pageLookUp(class PageTable*, unsigned int); // page table walk
+        uint32_t VPN;   // virtual page number
+        uint32_t PFN;   // physical frame number
         bool valid;
 };
 #endif
